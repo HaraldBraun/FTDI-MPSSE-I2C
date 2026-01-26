@@ -139,6 +139,7 @@ Alle internen D2XX‑Aufrufe prüfen FT_STATUS und werfen Exceptions bei Fehlern
 - Transferfehler
 
 ## 🧹 Dispose / Cleanup
+
 ```C#
 using (var dev = new MpsseI2cDevice(0))
 {    
@@ -147,6 +148,7 @@ using (var dev = new MpsseI2cDevice(0))
 ```
 
 ## 📘 Dokumentation
+
 Das Projekt bringt alle relevanten FTDI‑Dokumente mit:
 
 - AN 135 – MPSSE Basics

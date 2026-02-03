@@ -8,11 +8,6 @@ namespace FTDI_MPSSE_I2C {
         // Typdefinition aus ftd2xx.h
         internal const int FT_OK = 0;
 
-        // FT_HANDLE = void*
-        internal struct FT_HANDLE {
-            public IntPtr Handle;
-        }
-
         // ChannelConfig aus libmpsse_i2c.h
         [StructLayout( LayoutKind.Sequential )]
         internal struct ChannelConfig {

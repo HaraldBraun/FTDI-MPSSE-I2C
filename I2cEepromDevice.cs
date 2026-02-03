@@ -6,10 +6,7 @@ namespace FTDI_MPSSE_I2C {
     public class I2cEepromDevice {
         private readonly MpsseI2cDevice _bus;
         private readonly byte _addr;
-        private readonly int _pageSize;
-        private readonly TimeSpan _writeCycleDelay;
-        private readonly int _capacityBytes;
-
+        
         /// <summary>
         /// Creates a generic I²C-EEPROM-Device based on existing I²C-bus-handles.
         /// The class encapsulates EEPROM-typical access (address header, page-splitting, write-cycle
@@ -24,15 +21,9 @@ namespace FTDI_MPSSE_I2C {
         /// <remarks>This class internally uses the public API of <see cref="MpsseI2cDevice"/> and does not use direkt access of P/Invoke </remarks>
         public I2cEepromDevice(
             MpsseI2cDevice bus,
-            byte sevenBitAddress,
-            int capacityBytes,
-            int pageSize,
-            TimeSpan writeCycleDelay ) {
-            _bus = bus;
+            byte sevenBitAddress ) {
+            _bus = bus ?? throw new ArgumentNullException( nameof( bus ) );
             _addr = sevenBitAddress;
-            _capacityBytes = capacityBytes;
-            _pageSize = pageSize;
-            _writeCycleDelay = writeCycleDelay;
         }
 
         /// <summary>
@@ -42,30 +33,27 @@ namespace FTDI_MPSSE_I2C {
         /// <param name="memAddress"></param>
         /// <param name="data"></param>
         /// <exception cref="ArgumentNullException"></exception>
-        public void WriteEeprom( ushort memAddress, byte[] data ) {
+        public void WriteEeprom( ushort memAddress, byte[] data, int writeCycleDelayMs ) {
             if (data == null) {
                 throw new ArgumentNullException( nameof( data ) );
             }
-            ValidateRange( memAddress, data.Length );
 
-            foreach (var (addr, slice) in SplitIntoPageChunks( memAddress, data )) {
-                // Split 16-bit address in High/Low
-                byte high = (byte)(memAddress >> 8);
-                byte low = (byte)(memAddress & 0xFF);
+            // Split 16-bit address in High/Low
+            byte high = (byte)(memAddress >> 8);
+            byte low = (byte)(memAddress & 0xFF);
 
-                // Finale Frame: [HighAddr][LowAddr][Payload...]
-                var frame = new byte[data.Length + 2];
-                frame[0] = high;
-                frame[1] = low;
-                Array.Copy( data, 0, frame, 2, data.Length );
+            // Finale Frame: [HighAddr][LowAddr][Payload...]
+            var frame = new byte[data.Length + 2];
+            frame[0] = high;
+            frame[1] = low;
+            Array.Copy( data, 0, frame, 2, data.Length );
 
-                // Write via MpsseI2cDevice (over libmpsse I2C_DeviceWrite)
-                // Set STOP-Bit
-                _bus.Write( _addr, frame, stop: true );
+            // Write via MpsseI2cDevice (over libmpsse I2C_DeviceWrite)
+            // Set STOP-Bit
+            _bus.Write( _addr, frame, stop: true );
 
-                // Wait Write-Cycle
-                Thread.Sleep( _writeCycleDelay );
-            }
+            // Wait Write-Cycle
+            Thread.Sleep( writeCycleDelayMs );
         }
 
         /// <summary>
@@ -95,39 +83,18 @@ namespace FTDI_MPSSE_I2C {
         /// <summary>
         /// Checks for capacity overflow (start + length)
         /// </summary>
-        /// <param name="start"></param>
-        /// <param name="length"></param>
+        /// <param name="start">Start address for read/write</param>
+        /// <param name="length">Number of page size in byte. Example 32</param>
+        /// <param name="capacityBytes">Memory size from microcontroller. 64kBit = 8KByte = 8192</param>
         /// <exception cref="ArgumentOutOfRangeException"></exception>
-        private void ValidateRange( ushort start, int length ) {
+        public void ValidateRange( ushort start, int length, int capacityBytes ) {
             if (length < 0) throw new ArgumentOutOfRangeException( nameof( length ) );
 
             uint end = (uint)start + (uint)length; // cast to uint to prevent overflow
 
-            if (end > (uint) _capacityBytes)
+            if (end > (uint) capacityBytes)
                 throw new ArgumentOutOfRangeException( nameof( length ),
-                    $"Bereich 0x{start:X4}..0x{end - 1:X4} überschreitet Kapazität ({_capacityBytes} Bytes)." );
-        }
-
-        /// <summary>
-        /// Divides payload to page conform chunks, to avoid page border crossing
-        /// </summary>
-        /// <param name="start"></param>
-        /// <param name="payload"></param>
-        /// <returns></returns>
-        private IEnumerable<(ushort addr, ArraySegment<byte> slice)> SplitIntoPageChunks( ushort start, byte[] payload ) {
-            int offset = 0;
-            while (offset < payload.Length) {
-                int currentAddr = start + offset;
-                int pageBase = (currentAddr / _pageSize) * _pageSize;
-                int pageOffset = currentAddr - pageBase;
-                int spaceInPage = _pageSize - pageOffset;
-
-                int remaining = payload.Length - offset;
-                int chunkSize = Math.Min(remaining, spaceInPage);
-
-                yield return ((ushort) currentAddr, new ArraySegment<byte>( payload, offset, chunkSize ));
-                offset += chunkSize;
-            }
+                    $"Bereich 0x{start:X4}..0x{end - 1:X4} überschreitet Kapazität ({capacityBytes} Bytes)." );
         }
     }
 }

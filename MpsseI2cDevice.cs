@@ -33,6 +33,8 @@ namespace FTDI_MPSSE_I2C {
 
             CheckStatus( NativeMethods.I2C_InitChannel( _handle, ref cfg ),
                 nameof( NativeMethods.I2C_InitChannel ) );
+
+            _disposed = false;
         }
 
         // Schreibvorgang (WRITE)
@@ -47,7 +49,7 @@ namespace FTDI_MPSSE_I2C {
             CheckStatus(
                 NativeMethods.I2C_DeviceWrite(
                     _handle,
-                    (byte) (sevenBitAddress << 1),
+                    sevenBitAddress,
                     (uint) data.Length,
                     data,
                     out var written,
@@ -64,8 +66,8 @@ namespace FTDI_MPSSE_I2C {
 
             byte[] buffer = new byte[length];
 
-            uint options = (uint)(NativeMethods.TransferOptions.START_BIT
-                | NativeMethods.TransferOptions.NACK_LAST_BYTE);
+            uint options = (uint)(NativeMethods.TransferOptions.START_BIT | 
+                NativeMethods.TransferOptions.NACK_LAST_BYTE);
 
             if (stop)
                 options |= (uint) NativeMethods.TransferOptions.STOP_BIT;
@@ -73,7 +75,7 @@ namespace FTDI_MPSSE_I2C {
             CheckStatus(
                 NativeMethods.I2C_DeviceRead(
                     _handle,
-                    (byte) (sevenBitAddress << 1),
+                    sevenBitAddress,
                     length,
                     buffer,
                     out var read,
@@ -111,6 +113,18 @@ namespace FTDI_MPSSE_I2C {
             return (mpsse, ftdi);
         }
 
+        // Get Device ID
+        public void GetDeviceId (byte deviceID, out byte[] deviceIdList) {
+            deviceIdList = new byte[2]; // libMPSSE erwartet 2‑Byte Device ID
+            CheckStatus( NativeMethods.I2C_GetDeviceID( 
+                            _handle, 
+                            deviceID, 
+                            deviceIdList),
+                nameof( NativeMethods.I2C_GetDeviceID));
+            if (deviceIdList.Length < 1) 
+                throw new Exception($"GetDeviceId: no device found");
+        }
+
         // Statusergebnis prüfen
         private static void CheckStatus( uint status, string api ) {
             if (status != NativeMethods.FT_OK)
@@ -118,8 +132,11 @@ namespace FTDI_MPSSE_I2C {
         }
 
         private void EnsureNotDisposed( ) {
-            if (_disposed || _handle != IntPtr.Zero)
-                throw new ObjectDisposedException( nameof( MpsseI2cDevice ) );
+            if (_disposed ) 
+                throw new ObjectDisposedException( $"{nameof( MpsseI2cDevice )} \n\n {_disposed}" );
+
+            if (_handle == IntPtr.Zero)
+                throw new InvalidOperationException( "Device is not open" );
         }
 
         // Cleanup
